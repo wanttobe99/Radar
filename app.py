@@ -38,7 +38,7 @@ stocks_config = {
     "1038.HK": {"name": "長建", "min_yield": 4.8, "golden_yield": 5.8, "max_pe": 16, "tax_rate": 0.00, "shares": 0},
     "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.00, "shares": 0},
     "1883.HK": {"name": "CTM", "min_yield": 8.0, "golden_yield": 9.5, "max_pe": 15, "tax_rate": 0.00, "shares": 0},
-    "1088.HK": {"name": "中國神華", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 10, "tax_rate": 0.10, "shares": 0}
+    "1088.HK": {"name": "中國神華", "min_yield": 7.5, "golden_yield": 9.5, "max_pe": 10, "tax_rate": 0.10, "shares": 0}
 }
 
 # ==========================================
