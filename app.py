@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.title("🪣 500萬水庫火控雷達")
+st.title("500萬水庫火控雷達")
 st.markdown("**長倉必勝！舊倉看賣，新金買息。(智能「股息 + PE」雙重火控版)**")
 st.divider()
 
