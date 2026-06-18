@@ -31,14 +31,14 @@ st.divider()
 # ==========================================
 # 💡 提示：每年公司公佈業績後，請自行修改 "dps" (每股派息) 數字
 stocks_config = {
-    "0941.HK": {"name": "中移動", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 12, "tax_rate": 0.10, "shares": 500, "dps": 5.27},
-    "0883.HK": {"name": "中海油", "min_yield": 6.0, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.10, "shares": 5000, "dps": 1.28},
-    "0002.HK": {"name": "中電", "min_yield": 4.2, "golden_yield": 5.0, "max_pe": 20, "tax_rate": 0.00, "shares": 1000, "dps": 3.2},
-    "3988.HK": {"name": "中銀", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 6, "tax_rate": 0.10, "shares": 0, "dps": 0.2531},
-    "1038.HK": {"name": "長建", "min_yield": 4.8, "golden_yield": 5.8, "max_pe": 16, "tax_rate": 0.00, "shares": 0, "dps": 2.61},
-    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.00, "shares": 0, "dps": 5.857},
-    "1883.HK": {"name": "CTM", "min_yield": 8.0, "golden_yield": 9.5, "max_pe": 15, "tax_rate": 0.00, "shares": 0, "dps": 0.19},
-    "1088.HK": {"name": "中國神華", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 10, "tax_rate": 0.10, "shares": 0, "dps": 2.2389}
+    "0941.HK": {"name": "中移動", "min_yield": 5.8, "golden_yield": 6.7, "max_pe": 12, "tax_rate": 0.10, "shares": 500, "dps": 5.27},
+    "0883.HK": {"name": "中海油", "min_yield": 6.3, "golden_yield": 7.6, "max_pe": 10, "tax_rate": 0.10, "shares": 5000, "dps": 1.28},
+    "0002.HK": {"name": "中電", "min_yield": 4.5, "golden_yield": 5.5, "max_pe": 20, "tax_rate": 0.00, "shares": 1000, "dps": 3.2},
+    "3988.HK": {"name": "中銀", "min_yield": 6.7, "golden_yield": 7.6, "max_pe": 6, "tax_rate": 0.10, "shares": 0, "dps": 0.2531},
+    "1038.HK": {"name": "長建", "min_yield": 5.0, "golden_yield": 6.0, "max_pe": 16, "tax_rate": 0.00, "shares": 0, "dps": 2.61},
+    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 10, "tax_rate": 0.00, "shares": 0, "dps": 5.857},
+    "1883.HK": {"name": "CTM", "min_yield": 7.5, "golden_yield": 8.5, "max_pe": 15, "tax_rate": 0.00, "shares": 0, "dps": 0.19},
+    "1088.HK": {"name": "中國神華", "min_yield": 6.7, "golden_yield": 8.1, "max_pe": 10, "tax_rate": 0.10, "shares": 0, "dps": 2.2389}
 }
 
 # ==========================================
