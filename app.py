@@ -1,7 +1,21 @@
 import streamlit as st
-import yfinance as yf
-import pandas as pd
-import plotly.express as px
+
+try:
+    import yfinance as yf
+    import pandas as pd
+    import plotly.express as px
+except ModuleNotFoundError:
+    # 如果系統搵唔到套件，就強制用 pip 即場安裝
+    import os
+    os.system("pip install yfinance pandas plotly")
+    
+    # 裝完之後再 import 多次
+    import yfinance as yf
+    import pandas as pd
+    import plotly.express as px
+
+# 下面繼續你原本嘅 code...
+# st.set_page_config(...)
 
 # 1. 介面基礎設定 (適應 iPhone 螢幕)
 st.set_page_config(page_title="八大金剛 - 長倉必勝火控雷達", layout="wide", initial_sidebar_state="collapsed")
