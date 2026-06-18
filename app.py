@@ -12,7 +12,6 @@ for pkg in required_packages:
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import datetime
 
 # ==========================================
 # 1. 介面基礎設定
@@ -24,66 +23,42 @@ st.set_page_config(
 )
 
 st.title("🪣 500萬水庫火控雷達")
-st.markdown("**長倉必勝！舊倉看買，新金買息。 (全面自動化歷史股息版)**")
+st.markdown("**長倉必勝！舊倉看買，新金買息。(純手動精準派息版)**")
 st.divider()
 
 # ==========================================
-# 2. 核心數據庫 (已徹底拔除 expected_dps 預計派息欄位)
+# 2. 核心數據庫 (純手動派息模式)
 # ==========================================
+# 💡 提示：每年公司公佈業績後，請自行修改 "dps" (每股派息) 數字
 stocks_config = {
-    "0941.HK": {"name": "中移動", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 12, "tax_rate": 0.10, "shares": 500},
-    "0883.HK": {"name": "中海油", "min_yield": 6.0, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.10, "shares": 5000},
-    "0002.HK": {"name": "中電", "min_yield": 4.2, "golden_yield": 5.0, "max_pe": 20, "tax_rate": 0.00, "shares": 1000},
-    "3988.HK": {"name": "中銀", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 6, "tax_rate": 0.10, "shares": 0},
-    "1038.HK": {"name": "長建", "min_yield": 4.8, "golden_yield": 5.8, "max_pe": 16, "tax_rate": 0.00, "shares": 0},
-    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.00, "shares": 0},
-    "1883.HK": {"name": "CTM", "min_yield": 8.0, "golden_yield": 9.5, "max_pe": 15, "tax_rate": 0.00, "shares": 0},
-    "1088.HK": {"name": "中國神華", "min_yield": 7.5, "golden_yield": 9.5, "max_pe": 10, "tax_rate": 0.10, "shares": 0}
+    "0941.HK": {"name": "中移動", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 12, "tax_rate": 0.10, "shares": 500, "dps": 5.27},
+    "0883.HK": {"name": "中海油", "min_yield": 6.0, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.10, "shares": 5000, "dps": 1.28},
+    "0002.HK": {"name": "中電", "min_yield": 4.2, "golden_yield": 5.0, "max_pe": 20, "tax_rate": 0.00, "shares": 1000, "dps": 3.2},
+    "3988.HK": {"name": "中銀", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 6, "tax_rate": 0.10, "shares": 0, "dps": 0.2531},
+    "1038.HK": {"name": "長建", "min_yield": 4.8, "golden_yield": 5.8, "max_pe": 16, "tax_rate": 0.00, "shares": 0, "dps": 2.61},
+    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 8.0, "max_pe": 10, "tax_rate": 0.00, "shares": 0, "dps": 5.857},
+    "1883.HK": {"name": "CTM", "min_yield": 8.0, "golden_yield": 9.5, "max_pe": 15, "tax_rate": 0.00, "shares": 0, "dps": 0.19},
+    "1088.HK": {"name": "中國神華", "min_yield": 7.0, "golden_yield": 8.5, "max_pe": 10, "tax_rate": 0.10, "shares": 0, "dps": 2.2389}
 }
 
 # ==========================================
-# 3. 100% 純自動歷史數據抓取邏輯 (快取 5 分鐘)
+# 3. 極速現價抓取邏輯 (只抓股價，快取 5 分鐘)
 # ==========================================
 @st.cache_data(ttl=300)
-def fetch_stock_data(ticker_code, config):
+def fetch_stock_price(ticker_code):
     try:
         ticker = yf.Ticker(ticker_code)
-        
-        # 1. 抓取實時現價
         hist = ticker.history(period="1d")
         if not hist.empty:
-            current_price = hist['Close'].iloc[-1]
-        else:
-            current_price = ticker.fast_info.get('lastPrice', None)
-            
-        if current_price is None or current_price == 0:
-            return None
-            
-        # 2. 100% 自動抓取上一個年度 (2025年) 的真實總派息
-        last_year = datetime.datetime.now().year - 1
-        divs = ticker.dividends
-        
-        last_year_dps = 0
-        if not divs.empty:
-            last_year_dps = divs[divs.index.year == last_year].sum()
-            
-        # 防護機制：如果 yfinance 歷史數據庫未更新完畢導致算出來是 0，直接對接官方實時歷史實際派息金額 (TTM Rate)
-        if last_year_dps == 0 or pd.isna(last_year_dps):
-            last_year_dps = ticker.info.get('trailingAnnualDividendRate', 0)
-            if last_year_dps is None:
-                last_year_dps = 0
-                
-        return {
-            "current_price": round(current_price, 3),
-            "annual_dps": float(last_year_dps)
-        }
+            return round(hist['Close'].iloc[-1], 3)
+        return round(ticker.fast_info.get('lastPrice', 0), 3)
     except Exception:
         return None
 
-# 預先加載所有數據
-stock_data_cache = {}
-for ticker_code, config in stocks_config.items():
-    stock_data_cache[ticker_code] = fetch_stock_data(ticker_code, config)
+# 預先加載所有股價
+stock_prices_cache = {}
+for ticker_code in stocks_config.keys():
+    stock_prices_cache[ticker_code] = fetch_stock_price(ticker_code)
 
 # ==========================================
 # 4. 💼 實時持倉與水庫狀態面版
@@ -95,13 +70,12 @@ total_annual_dividend = 0
 portfolio_data = []
 
 for ticker_code, config in stocks_config.items():
-    data = stock_data_cache[ticker_code]
-    if data is None: continue
+    current_price = stock_prices_cache[ticker_code]
+    if current_price is None or current_price == 0: continue
     
     shares = config["shares"]
-    current_price = data["current_price"]
-    # 自動計算上年實際派息扣稅後的淨股息
-    net_dps = data["annual_dps"] * (1 - config["tax_rate"])
+    # 根據你手動填寫的 dps 計算稅後淨股息
+    net_dps = config["dps"] * (1 - config["tax_rate"])
     
     if shares > 0:
         market_value = current_price * shares
@@ -118,12 +92,10 @@ for ticker_code, config in stocks_config.items():
             "預計全年收息 ($)": expected_div
         })
 
-# 顯示水庫總計
 col1, col2 = st.columns(2)
 col1.metric(label="💰 總持倉市值", value=f"${total_market_value:,.2f}")
-col2.metric(label="🚰 上年實際股息計算 - 預計全年淨被動收入", value=f"${total_annual_dividend:,.2f}")
+col2.metric(label="🚰 預計全年淨被動收入", value=f"${total_annual_dividend:,.2f}")
 
-# 顯示持倉表格
 if portfolio_data:
     df_portfolio = pd.DataFrame(portfolio_data)
     st.dataframe(
@@ -142,14 +114,14 @@ st.divider()
 st.subheader("📊 實時火控監測面版")
 
 for ticker_code, config in stocks_config.items():
-    data = stock_data_cache[ticker_code]
+    current_price = stock_prices_cache[ticker_code]
     
-    if data is None:
-        st.error(f"❌ 網絡超時：無法獲取 {config['name']} ({ticker_code}) 數據。")
+    if current_price is None or current_price == 0:
+        st.error(f"❌ 網絡超時：無法獲取 {config['name']} ({ticker_code}) 現價。")
         continue
         
-    current_price = data["current_price"]
-    net_dps = data["annual_dps"] * (1 - config["tax_rate"])
+    # 計算實質息率 (使用手動 dps)
+    net_dps = config["dps"] * (1 - config["tax_rate"])
     current_yield = (net_dps / current_price) * 100
     max_fire_price = net_dps / (config["min_yield"] / 100)
     
@@ -161,15 +133,15 @@ for ticker_code, config in stocks_config.items():
         is_green = False
         premium = ((config["min_yield"] / current_yield) - 1) * 100
 
-    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 實質歷史息率: {current_yield:.2f}%"
+    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 實質息率: {current_yield:.2f}%"
     
     with st.expander(expander_title, expanded=True):
         st.write(f"**防禦設定：** 淺綠線 {config['min_yield']:.1f}% | 深綠黃金線 {config['golden_yield']:.1f}%")
-        st.write(f"ℹ️ *系統已全自動抓取上年實際每股派息計數：${data['annual_dps']:.3f} (未扣稅)*")
+        st.caption(f"✍️ *手動派息設定：${config['dps']:.4f} (未扣稅)*")
         
         if is_green:
             st.success(
-                f"🍏 **淺綠燈！** 目前實質歷史息率 {current_yield:.2f}% 已進入常規伏擊圈（最高開火價 ${max_fire_price:.2f}）。\n\n"
+                f"🍏 **淺綠燈！** 目前實質息率 {current_yield:.2f}% 已進入常規伏擊圈（最高開火價 ${max_fire_price:.2f}）。\n\n"
                 f"**戰術：** 配合每月出糧資金，啟動常規步兵分批建倉。"
             )
         else:
