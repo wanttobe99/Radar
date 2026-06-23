@@ -1,10 +1,10 @@
 import os
 import sys
 import time
-import requests
+import random
 
 # 🚀 終極防錯：自動檢查並安裝缺失的套件
-required_packages = ["yfinance", "pandas", "plotly", "requests"]
+required_packages = ["yfinance", "pandas", "plotly"]
 for pkg in required_packages:
     try:
         __import__(pkg)
@@ -14,14 +14,6 @@ for pkg in required_packages:
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-
-# ==========================================
-# 0. 網絡偽裝與連線設定 (防 Yahoo 封鎖)
-# ==========================================
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-})
 
 # ==========================================
 # 1. 介面基礎設定
@@ -51,38 +43,51 @@ stocks_config = {
 }
 
 # ==========================================
-# 3. 動態數據抓取 (防超時重試機制 + EPS 抓取)
+# 3. 動態數據抓取 (人類行為模擬 + 降級容錯機制)
 # ==========================================
 @st.cache_data(ttl=300)
 def fetch_stock_market_data(ticker_code, retries=3):
+    # 加入隨機休眠，模擬人類逐隻股票 Click 入去睇嘅節奏 (1至3秒)
+    time.sleep(random.uniform(1.0, 3.0)) 
+    
     for i in range(retries):
         try:
-            ticker = yf.Ticker(ticker_code, session=session)
-            hist = ticker.history(period="1d")
+            ticker = yf.Ticker(ticker_code)
             
-            # 抓股價
-            if not hist.empty:
-                price = round(hist['Close'].iloc[-1], 3)
-            else:
-                price = round(ticker.fast_info.get('lastPrice', 0), 3)
-                
+            # 1. 先用 fast_info 鎖定最基本嘅現價 (呢個極少被 Block)
+            fast_price = ticker.fast_info.get('lastPrice', 0)
+            price = round(fast_price, 3)
+            
+            # 2. 嘗試獲取深入財務數據 (.info 容易被 Block)
             info = ticker.info
             pe = info.get('trailingPE', None)
             eps = info.get('trailingEps', None)
-            yf_dps = info.get('trailingAnnualDividendRate', None) # 用於計算派息比率
+            yf_dps = info.get('trailingAnnualDividendRate', None)
             
             if price > 0:
                 return {"price": price, "pe": pe, "eps": eps, "yf_dps": yf_dps}
+                
         except Exception:
             if i < retries - 1:
-                time.sleep(1) # 失敗等1秒再試
+                # 俾人 Block 咗，扮死停耐啲 (3至5秒) 再試
+                time.sleep(random.uniform(3.0, 5.0))
                 continue
+            
+            # 如果真係拎唔到深入數據，降級處理：只回傳現價，PE/EPS 當無數據
+            try:
+                backup_price = round(yf.Ticker(ticker_code).fast_info.get('lastPrice', 0), 3)
+                if backup_price > 0:
+                    return {"price": backup_price, "pe": None, "eps": None, "yf_dps": None}
+            except:
+                pass
+                
     return None
 
 # 預先加載所有市場數據 (包含 QQQ)
 market_data_cache = {}
-for ticker_code in list(stocks_config.keys()) + ["QQQ"]:
-    market_data_cache[ticker_code] = fetch_stock_market_data(ticker_code)
+with st.spinner('📡 雷達啟動中，正在隱蔽掃描市場數據... (約需15-20秒)'):
+    for ticker_code in list(stocks_config.keys()) + ["QQQ"]:
+        market_data_cache[ticker_code] = fetch_stock_market_data(ticker_code)
 
 # ==========================================
 # 4. 💼 實時持倉與水庫狀態面版
@@ -157,7 +162,7 @@ for ticker_code, config in stocks_config.items():
     # 🌟 派息比率健康檢查
     payout_ratio_display = "暫無數據"
     payout_pass = True # 預設放行
-    is_utility = ticker_code in ['0002.HK', '1038.HK']
+    is_utility = ticker_code in ['0002.HK', '1038.HK', '0006.HK']
     healthy_limit = 100 if is_utility else 75
     danger_limit = 120 if is_utility else 90
 
