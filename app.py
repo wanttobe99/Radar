@@ -1,8 +1,10 @@
 import os
 import sys
+import time
+import requests
 
 # 🚀 終極防錯：自動檢查並安裝缺失的套件
-required_packages = ["yfinance", "pandas", "plotly"]
+required_packages = ["yfinance", "pandas", "plotly", "requests"]
 for pkg in required_packages:
     try:
         __import__(pkg)
@@ -14,6 +16,14 @@ import yfinance as yf
 import pandas as pd
 
 # ==========================================
+# 0. 網絡偽裝與連線設定 (防 Yahoo 封鎖)
+# ==========================================
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+})
+
+# ==========================================
 # 1. 介面基礎設定
 # ==========================================
 st.set_page_config(
@@ -22,8 +32,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.title("500萬水庫火控雷達")
-st.markdown("**長倉必勝！舊倉看賣，新金買息。(智能「股息 + PE」雙重火控版)**")
+st.title("🎯 500萬水庫火控雷達 (9:1 終極退休陣型)")
+st.markdown("**長倉必勝！舊倉看賣，新金買息。(智能「股息 + PE + 派息比率」三重火控版)**")
 st.divider()
 
 # ==========================================
@@ -41,31 +51,37 @@ stocks_config = {
 }
 
 # ==========================================
-# 3. 動態數據抓取 (同時抓取 股價 與 實時 PE)
+# 3. 動態數據抓取 (防超時重試機制 + EPS 抓取)
 # ==========================================
 @st.cache_data(ttl=300)
-def fetch_stock_market_data(ticker_code):
-    try:
-        ticker = yf.Ticker(ticker_code)
-        hist = ticker.history(period="1d")
-        
-        # 抓股價
-        if not hist.empty:
-            price = round(hist['Close'].iloc[-1], 3)
-        else:
-            price = round(ticker.fast_info.get('lastPrice', 0), 3)
+def fetch_stock_market_data(ticker_code, retries=3):
+    for i in range(retries):
+        try:
+            ticker = yf.Ticker(ticker_code, session=session)
+            hist = ticker.history(period="1d")
             
-        # 抓網上實時市盈率 (TTM PE)
-        info = ticker.info
-        pe = info.get('trailingPE', None)
-        
-        return {"price": price, "pe": pe}
-    except Exception:
-        return None
+            # 抓股價
+            if not hist.empty:
+                price = round(hist['Close'].iloc[-1], 3)
+            else:
+                price = round(ticker.fast_info.get('lastPrice', 0), 3)
+                
+            info = ticker.info
+            pe = info.get('trailingPE', None)
+            eps = info.get('trailingEps', None)
+            yf_dps = info.get('trailingAnnualDividendRate', None) # 用於計算派息比率
+            
+            if price > 0:
+                return {"price": price, "pe": pe, "eps": eps, "yf_dps": yf_dps}
+        except Exception:
+            if i < retries - 1:
+                time.sleep(1) # 失敗等1秒再試
+                continue
+    return None
 
-# 預先加載所有市場數據
+# 預先加載所有市場數據 (包含 QQQ)
 market_data_cache = {}
-for ticker_code in stocks_config.keys():
+for ticker_code in list(stocks_config.keys()) + ["QQQ"]:
     market_data_cache[ticker_code] = fetch_stock_market_data(ticker_code)
 
 # ==========================================
@@ -78,7 +94,7 @@ total_annual_dividend = 0
 portfolio_data = []
 
 for ticker_code, config in stocks_config.items():
-    m_data = market_data_cache[ticker_code]
+    m_data = market_data_cache.get(ticker_code)
     if m_data is None or m_data["price"] == 0: continue
     
     current_price = m_data["price"]
@@ -101,7 +117,7 @@ for ticker_code, config in stocks_config.items():
         })
 
 col1, col2 = st.columns(2)
-col1.metric(label="💰 總持倉市值", value=f"${total_market_value:,.2f}")
+col1.metric(label="💰 港股防禦盾市值 (90%)", value=f"${total_market_value:,.2f}")
 col2.metric(label="🚰 預計全年淨被動收入", value=f"${total_annual_dividend:,.2f}")
 
 if portfolio_data:
@@ -117,12 +133,12 @@ else:
 st.divider()
 
 # ==========================================
-# 5. 📊 實時火控監測面版 (引入 PE 判定安全鎖)
+# 5. 📊 實時火控監測面版 (引入 PE 與派息比率安全鎖)
 # ==========================================
 st.subheader("📊 實時火控監測面版")
 
 for ticker_code, config in stocks_config.items():
-    m_data = market_data_cache[ticker_code]
+    m_data = market_data_cache.get(ticker_code)
     
     if m_data is None or m_data["price"] == 0:
         st.error(f"❌ 網絡超時：無法獲取 {config['name']} ({ticker_code}) 數據。")
@@ -130,45 +146,89 @@ for ticker_code, config in stocks_config.items():
         
     current_price = m_data["price"]
     current_pe = m_data["pe"]
+    eps = m_data["eps"]
+    yf_dps = m_data["yf_dps"]
     
     # 計算實質息率
     net_dps = config["dps"] * (1 - config["tax_rate"])
     current_yield = (net_dps / current_price) * 100
     max_fire_price = net_dps / (config["min_yield"] / 100)
     
-    # 🌟 【核心修訂】雙重條件判定：股息率要夠高，而且實時 PE 必須小於或等於 max_pe 防守線
-    yield_pass = current_yield >= config["min_yield"]
-    pe_pass = (current_pe is None) or (current_pe <= config["max_pe"]) # 如果網上漏數據則以股息為主放行
+    # 🌟 派息比率健康檢查
+    payout_ratio_display = "暫無數據"
+    payout_pass = True # 預設放行
+    is_utility = ticker_code in ['0002.HK', '1038.HK']
+    healthy_limit = 100 if is_utility else 75
+    danger_limit = 120 if is_utility else 90
+
+    if eps and eps > 0 and yf_dps:
+        payout_ratio = (yf_dps / eps) * 100
+        payout_ratio_display = f"{payout_ratio:.1f}%"
+        if payout_ratio > danger_limit:
+            payout_pass = False # 觸發危險紅燈
+    elif eps is not None and eps <= 0:
+        payout_ratio_display = "負盈利"
+        payout_pass = False # 虧損公司不買
     
-    if yield_pass and pe_pass:
+    # 🌟 核心修訂：三重條件判定 (股息、PE、派息比率)
+    yield_pass = current_yield >= config["min_yield"]
+    pe_pass = (current_pe is None) or (current_pe <= config["max_pe"])
+    
+    if yield_pass and pe_pass and payout_pass:
         status_icon = "🟢"
         is_green = True
     else:
         status_icon = "🔻"
         is_green = False
-        premium = ((config["min_yield"] / current_yield) - 1) * 100
+        premium = ((config["min_yield"] / current_yield) - 1) * 100 if current_yield > 0 else 0
 
     pe_display = f"{current_pe:.1f} 倍" if current_pe is not None else "暫無數據"
-    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 實質息率: {current_yield:.2f}% | 實時 PE: {pe_display}"
+    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 息率: {current_yield:.2f}% | PE: {pe_display} | 派息比率: {payout_ratio_display}"
     
     with st.expander(expander_title, expanded=True):
-        st.write(f"**防禦防線：** 淺綠息率 {config['min_yield']:.1f}% (上限 PE: {config['max_pe']:.1f}倍) | 深綠黃金線 {config['golden_yield']:.1f}%")
-        st.caption(f"✍️ *手動固定派息設定：${config['dps']:.4f} (未扣稅)*")
+        st.write(f"**防線設定：** 淺綠息率 {config['min_yield']:.1f}% | 上限 PE: {config['max_pe']:.1f}倍 | 派息比率紅線: {danger_limit}%")
         
         if is_green:
             st.success(
-                f"🍏 **雙重大綠燈！** 目前實質息率 {current_yield:.2f}% 已達標，且實時市盈率 ({pe_display}) 位處安全線內。\n\n"
-                f"**戰術：** 估值合理且回報足夠，啟動常規步兵分批建倉（最高合理買入價 ${max_fire_price:.2f}）。"
+                f"🍏 **全綠燈放行！** 息率達標 ({current_yield:.2f}%)、估值合理 ({pe_display})，且派息現金流健康 ({payout_ratio_display})。\n\n"
+                f"**戰術：** 啟動常規步兵分批建倉（最高合理買入價 ${max_fire_price:.2f}）。"
             )
         else:
             # 區分開火失敗的原因
-            if yield_pass and not pe_pass:
+            if not payout_pass:
                 st.error(
-                    f"⚠️ **高息估值過高警告！** 雖然目前落袋息率有 {current_yield:.2f}% 達標，但實時 PE ({pe_display}) 已經高過安全上限 {config['max_pe']:.1f} 倍！\n\n"
-                    f"**戰術：** 觸發安全制動！代表市場可能預期盈利將大幅倒退，拒絕開火，繼續鎖死保險箱觀察！"
+                    f"🚨 **派息崩塌預警！** 派息比率高達 {payout_ratio_display}，超越 {danger_limit}% 安全線！(可能正在消耗現金儲備派息)\n\n"
+                    f"**戰術：** 絕對鎖死買入！若持有舊倉，強烈建議觀察下期財報，準備套現換馬！"
+                )
+            elif yield_pass and not pe_pass:
+                st.warning(
+                    f"⚠️ **高息估值陷阱！** 息率雖達標，但實時 PE ({pe_display}) 超過安全上限 {config['max_pe']:.1f} 倍。\n\n"
+                    f"**戰術：** 拒絕開火，可能預期盈利將大幅倒退，繼續鎖死保險箱觀察！"
                 )
             else:
                 st.warning(
-                    f"🔴 **紅燈警戒！** 股息率未達伏擊圈，距離淺綠開火線尚有 **+{premium:.1f}%** 溢價（目標開火價 ${max_fire_price:.2f}）。\n\n"
+                    f"🔴 **股息率未達標！** 距離淺綠開火線尚有 **+{premium:.1f}%** 溢價（目標開火價 ${max_fire_price:.2f}）。\n\n"
                     f"**戰術：** 忍手！將子彈留給未來的特價區。"
                 )
+
+st.divider()
+
+# ==========================================
+# 6. 🚀 衛星增長引擎 (10% 預算定投 QQQ)
+# ==========================================
+st.subheader("🚀 衛星增長引擎 (10% IB 美股碎股定投)")
+qqq_data = market_data_cache.get("QQQ")
+
+if qqq_data and qqq_data["price"] > 0:
+    qqq_price = qqq_data["price"]
+    monthly_budget_hkd = 4000
+    monthly_budget_usd = monthly_budget_hkd / 7.8 # 粗略匯率
+    est_shares = monthly_budget_usd / qqq_price
+    
+    st.info(
+        f"**納斯達克 100 指數 ETF (QQQ)**\n\n"
+        f"🦅 **實時現價：** ${qqq_price:.2f} USD\n\n"
+        f"📊 **本月執行指令：** 不看估值、不看股息。使用本月 10% 預算 (約 $512 USD)，於每月 26 號透過 IB 買入約 **{est_shares:.3f} 股**。"
+    )
+else:
+    st.error("暫時無法獲取 QQQ 實時數據，請稍後重試。")
