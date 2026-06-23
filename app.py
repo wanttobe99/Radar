@@ -2,10 +2,9 @@ import os
 import sys
 import time
 import random
-import requests
 
 # 🚀 終極防錯：自動檢查並安裝缺失的套件
-required_packages = ["yfinance", "pandas", "plotly", "requests"]
+required_packages = ["yfinance", "pandas", "plotly", "streamlit"]
 for pkg in required_packages:
     try:
         __import__(pkg)
@@ -15,12 +14,6 @@ for pkg in required_packages:
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-
-# 建立帶有偽裝的 Session，解決 Streamlit IP 容易被 Block 的問題
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-})
 
 # ==========================================
 # 1. 介面基礎設定
@@ -50,7 +43,7 @@ stocks_config = {
 }
 
 # ==========================================
-# 3. 動態數據抓取 (混合智能股息 + 容錯機制)
+# 3. 動態數據抓取 (防彈版：使用 history 代替 fast_info)
 # ==========================================
 @st.cache_data(ttl=300)
 def fetch_stock_market_data(ticker_code, retries=3):
@@ -58,10 +51,16 @@ def fetch_stock_market_data(ticker_code, retries=3):
     
     for i in range(retries):
         try:
-            ticker = yf.Ticker(ticker_code, session=session)
-            fast_price = ticker.fast_info.get('lastPrice', 0)
-            price = round(fast_price, 3)
+            # 放棄自訂 Session，讓 yfinance 自己處理底層防禦
+            ticker = yf.Ticker(ticker_code)
             
+            # 🌟 最穩陣嘅現價抓取法：拿過去 1 日的歷史數據
+            hist = ticker.history(period="1d")
+            if hist.empty:
+                raise ValueError("無法獲取歷史數據")
+            price = round(hist['Close'].iloc[-1], 3)
+            
+            # 抓取基本面數據
             info = ticker.info
             pe = info.get('trailingPE', None)
             eps = info.get('trailingEps', None)
@@ -77,25 +76,28 @@ def fetch_stock_market_data(ticker_code, retries=3):
                 safe_div = forward_div or trailing_div
                 div_warning = "✅ 單一數據源"
             
-            if price > 0:
-                return {"price": price, "pe": pe, "eps": eps, "safe_div": safe_div, "div_warning": div_warning}
+            return {"price": price, "pe": pe, "eps": eps, "safe_div": safe_div, "div_warning": div_warning}
                 
         except Exception:
             if i < retries - 1:
+                # 俾人 Block 咗或者超時，扮死停耐啲再試
                 time.sleep(random.uniform(3.0, 5.0))
                 continue
             
+            # 終極降級處理：如果連 info 都攞唔到，最少攞個現價俾你睇
             try:
-                backup_price = round(yf.Ticker(ticker_code, session=session).fast_info.get('lastPrice', 0), 3)
-                if backup_price > 0:
-                    return {"price": backup_price, "pe": None, "eps": None, "safe_div": None, "div_warning": "🔴 網絡超時降級"}
+                backup_ticker = yf.Ticker(ticker_code)
+                backup_hist = backup_ticker.history(period="1d")
+                if not backup_hist.empty:
+                    backup_price = round(backup_hist['Close'].iloc[-1], 3)
+                    return {"price": backup_price, "pe": None, "eps": None, "safe_div": None, "div_warning": "🔴 網絡超時降級 (只顯示現價)"}
             except:
                 pass
                 
     return None
 
 market_data_cache = {}
-with st.spinner('📡 雷達啟動中，正在掃描 100% 港股防禦水庫數據... (約需15-20秒)'):
+with st.spinner('📡 雷達啟動中，正在隱蔽掃描 100% 港股防禦水庫數據... (約需15-20秒)'):
     for ticker_code in stocks_config.keys():
         market_data_cache[ticker_code] = fetch_stock_market_data(ticker_code)
 
