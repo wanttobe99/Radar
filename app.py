@@ -1,10 +1,8 @@
 import os
 import sys
-import time
-import random
 
 # 🚀 終極防錯：自動檢查並安裝缺失的套件
-required_packages = ["yfinance", "pandas", "plotly", "streamlit"]
+required_packages = ["yfinance", "pandas", "streamlit"]
 for pkg in required_packages:
     try:
         __import__(pkg)
@@ -25,79 +23,53 @@ st.set_page_config(
 )
 
 st.title("🎯 500萬水庫火控雷達 (100% 港股純防禦陣型)")
-st.markdown("**長倉必勝！舊倉看賣，新金買息。(智能「股息 + PE + 派息比率」三重火控版)**")
+st.markdown("**長倉必勝！舊倉看賣，新金買息。(全手動精準股息 + PE + 派息比率 三重火控版)**")
 st.divider()
 
 # ==========================================
-# 2. 核心數據庫 (保留手動 DPS 作為終極後備)
+# 2. 核心數據庫 (👑 絕對信任手動輸入的 dps)
 # ==========================================
 stocks_config = {
-    "0941.HK": {"name": "中移動", "min_yield": 5.8, "golden_yield": 6.7, "max_pe": 12.0, "tax_rate": 0.10, "shares": 500, "manual_dps": 5.27},
-    "0883.HK": {"name": "中海油", "min_yield": 6.3, "golden_yield": 7.6, "max_pe": 10.0, "tax_rate": 0.10, "shares": 5000, "manual_dps": 1.28},
-    "0002.HK": {"name": "中電", "min_yield": 4.5, "golden_yield": 5.5, "max_pe": 20.0, "tax_rate": 0.00, "shares": 1000, "manual_dps": 3.20},
-    "3988.HK": {"name": "中銀", "min_yield": 6.7, "golden_yield": 7.6, "max_pe": 6.0, "tax_rate": 0.10, "shares": 0, "manual_dps": 0.2531},
-    "1038.HK": {"name": "長建", "min_yield": 5.0, "golden_yield": 6.0, "max_pe": 16.0, "tax_rate": 0.00, "shares": 0, "manual_dps": 2.61},
-    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 10.0, "tax_rate": 0.00, "shares": 0, "manual_dps": 5.857},
-    "1883.HK": {"name": "CTM", "min_yield": 7.5, "golden_yield": 8.5, "max_pe": 15.0, "tax_rate": 0.00, "shares": 0, "manual_dps": 0.19},
-    "1088.HK": {"name": "中國神華", "min_yield": 6.7, "golden_yield": 8.1, "max_pe": 10.0, "tax_rate": 0.10, "shares": 0, "manual_dps": 2.2389}
+    "0941.HK": {"name": "中移動", "min_yield": 5.8, "golden_yield": 6.7, "max_pe": 12.0, "tax_rate": 0.10, "shares": 500, "dps": 5.27},
+    "0883.HK": {"name": "中海油", "min_yield": 6.3, "golden_yield": 7.6, "max_pe": 10.0, "tax_rate": 0.10, "shares": 5000, "dps": 1.28},
+    "0002.HK": {"name": "中電", "min_yield": 4.5, "golden_yield": 5.5, "max_pe": 20.0, "tax_rate": 0.00, "shares": 1000, "dps": 3.20},
+    "3988.HK": {"name": "中銀", "min_yield": 6.7, "golden_yield": 7.6, "max_pe": 6.0, "tax_rate": 0.10, "shares": 0, "dps": 0.2531},
+    "1038.HK": {"name": "長建", "min_yield": 5.0, "golden_yield": 6.0, "max_pe": 16.0, "tax_rate": 0.00, "shares": 0, "dps": 2.61},
+    "0005.HK": {"name": "滙控", "min_yield": 6.5, "golden_yield": 7.5, "max_pe": 10.0, "tax_rate": 0.00, "shares": 0, "dps": 5.857},
+    "1883.HK": {"name": "CTM", "min_yield": 7.5, "golden_yield": 8.5, "max_pe": 15.0, "tax_rate": 0.00, "shares": 0, "dps": 0.19},
+    "1088.HK": {"name": "中國神華", "min_yield": 6.7, "golden_yield": 8.1, "max_pe": 10.0, "tax_rate": 0.10, "shares": 0, "dps": 2.2389}
 }
 
 # ==========================================
-# 3. 動態數據抓取 (防彈版：使用 history 代替 fast_info)
+# 3. 動態數據抓取 (⚡ 閃電防卡死版：只抓現價與 EPS)
 # ==========================================
 @st.cache_data(ttl=300)
-def fetch_stock_market_data(ticker_code, retries=3):
-    time.sleep(random.uniform(1.0, 3.0)) 
-    
-    for i in range(retries):
+def fetch_stock_market_data(ticker_code):
+    try:
+        ticker = yf.Ticker(ticker_code)
+        
+        # 極速抓取現價 (用 fast_info 最快，失敗秒轉 history)
         try:
-            # 放棄自訂 Session，讓 yfinance 自己處理底層防禦
-            ticker = yf.Ticker(ticker_code)
-            
-            # 🌟 最穩陣嘅現價抓取法：拿過去 1 日的歷史數據
+            price = round(ticker.fast_info['lastPrice'], 3)
+        except:
             hist = ticker.history(period="1d")
             if hist.empty:
-                raise ValueError("無法獲取歷史數據")
+                raise ValueError("無法獲取現價")
             price = round(hist['Close'].iloc[-1], 3)
+        
+        # 抓取基本面 (只為咗計 PE 同埋 派息比率)
+        info = ticker.info
+        pe = info.get('trailingPE', None)
+        eps = info.get('trailingEps', None)
+        
+        return {"price": price, "pe": pe, "eps": eps}
             
-            # 抓取基本面數據
-            info = ticker.info
-            pe = info.get('trailingPE', None)
-            eps = info.get('trailingEps', None)
-            
-            # 智能股息抓取：交叉比對歷史與預測
-            trailing_div = info.get('trailingAnnualDividendRate', 0)
-            forward_div = info.get('dividendRate', 0)
-            
-            if forward_div and trailing_div:
-                safe_div = min(forward_div, trailing_div)
-                div_warning = "⚠️ 預警：市場預期減息" if forward_div < trailing_div * 0.9 else "✅ 派息穩定"
-            else:
-                safe_div = forward_div or trailing_div
-                div_warning = "✅ 單一數據源"
-            
-            return {"price": price, "pe": pe, "eps": eps, "safe_div": safe_div, "div_warning": div_warning}
-                
-        except Exception:
-            if i < retries - 1:
-                # 俾人 Block 咗或者超時，扮死停耐啲再試
-                time.sleep(random.uniform(3.0, 5.0))
-                continue
-            
-            # 終極降級處理：如果連 info 都攞唔到，最少攞個現價俾你睇
-            try:
-                backup_ticker = yf.Ticker(ticker_code)
-                backup_hist = backup_ticker.history(period="1d")
-                if not backup_hist.empty:
-                    backup_price = round(backup_hist['Close'].iloc[-1], 3)
-                    return {"price": backup_price, "pe": None, "eps": None, "safe_div": None, "div_warning": "🔴 網絡超時降級 (只顯示現價)"}
-            except:
-                pass
-                
-    return None
+    except Exception:
+        # 如果任何一步出錯，即刻投降返回 0，絕不死等卡畫面
+        return {"price": 0, "pe": None, "eps": None}
 
 market_data_cache = {}
-with st.spinner('📡 雷達啟動中，正在隱蔽掃描 100% 港股防禦水庫數據... (約需15-20秒)'):
+with st.spinner('📡 雷達極速掃描中 (忽略自動股息，套用手動精準數據)...'):
     for ticker_code in stocks_config.keys():
         market_data_cache[ticker_code] = fetch_stock_market_data(ticker_code)
 
@@ -117,9 +89,8 @@ for ticker_code, config in stocks_config.items():
     current_price = m_data["price"]
     shares = config["shares"]
     
-    # 決定使用自動抓取的保守股息，還是手動輸入的後備股息
-    raw_dps = m_data.get("safe_div") if m_data.get("safe_div") else config["manual_dps"]
-    net_dps = raw_dps * (1 - config["tax_rate"])
+    # 👑 強制使用手動設定的 DPS
+    net_dps = config["dps"] * (1 - config["tax_rate"])
     
     if shares > 0:
         market_value = current_price * shares
@@ -167,14 +138,9 @@ for ticker_code, config in stocks_config.items():
     current_price = m_data["price"]
     current_pe = m_data["pe"]
     eps = m_data["eps"]
-    safe_div = m_data["safe_div"]
-    div_warning = m_data.get("div_warning", "")
     
-    # 決定使用自動抓取的保守股息，還是手動輸入的後備股息
-    active_dps = safe_div if safe_div else config["manual_dps"]
-    data_source_label = "智能抓取" if safe_div else "手動後備"
-    
-    # 計算實質息率
+    # 👑 強制使用手動設定的 DPS 進行所有計算
+    active_dps = config["dps"]
     net_dps = active_dps * (1 - config["tax_rate"])
     current_yield = (net_dps / current_price) * 100
     max_fire_price = net_dps / (config["min_yield"] / 100)
@@ -186,7 +152,8 @@ for ticker_code, config in stocks_config.items():
     healthy_limit = 100 if is_utility else 75
     danger_limit = 120 if is_utility else 90
 
-    if eps and eps > 0 and active_dps:
+    if eps and eps > 0:
+        # 用你的精準股息除以 Yahoo 最新 EPS
         payout_ratio = (active_dps / eps) * 100
         payout_ratio_display = f"{payout_ratio:.1f}%"
         if payout_ratio > danger_limit:
@@ -208,12 +175,10 @@ for ticker_code, config in stocks_config.items():
         premium = ((config["min_yield"] / current_yield) - 1) * 100 if current_yield > 0 else 0
 
     pe_display = f"{current_pe:.1f} 倍" if current_pe is not None else "暫無數據"
-    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 息率: {current_yield:.2f}% ({data_source_label}) | PE: {pe_display} | 派息比率: {payout_ratio_display}"
+    expander_title = f"{status_icon} {config['name']} ({ticker_code}) - 現價: ${current_price:.2f} | 息率: {current_yield:.2f}% (手動精準) | PE: {pe_display} | 派息比率: {payout_ratio_display}"
     
     with st.expander(expander_title, expanded=True):
         st.write(f"**防線設定：** 淺綠息率 {config['min_yield']:.1f}% | 上限 PE: {config['max_pe']:.1f}倍 | 派息比率紅線: {danger_limit}%")
-        if "預警" in div_warning:
-            st.warning(div_warning)
             
         if is_green:
             st.success(
@@ -239,4 +204,4 @@ for ticker_code, config in stocks_config.items():
 
 # UI 結尾留白
 st.write("---")
-st.caption("Powered by 終極 100% 港股防禦系統")
+st.caption("Powered by 終極 100% 港股防禦系統 | 股息數據：手動精準鎖定")
